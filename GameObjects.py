@@ -9,9 +9,10 @@ import checker
 #kiri = Vector((-1, 0, 0))
 #kanan = Vector((1, 0, 0))
 
-diameter = 25
+diameter = 20
 maxLangkah = 7
 maxRoom = 15
+scale = 10
 
 def acakLangkah():
 	return floor(maxLangkah * random())
@@ -59,12 +60,14 @@ class Vec(list):
 		else:
 			raise TypeError
 
-atas = Vec([0,1])
-bawah = Vec([0,-1])
-kiri = Vec([-1,0])
-kanan = Vec([1,0])
+atas = Vec([0,scale])
+bawah = Vec([0,-scale])
+kiri = Vec([-scale,0])
+kanan = Vec([scale,0])
 
 arah = [atas, bawah, kiri, kanan]
+
+firstBlockBool = True
 
 class KX_GreenBlock(bge.types.KX_GameObject):
 	def __init__(self, old_owner):
@@ -73,9 +76,46 @@ class KX_GreenBlock(bge.types.KX_GameObject):
 		self.sebelumnya = None
 		self.next = []
 		
+		global firstBlockBool
+		self.obj = None
+		if firstBlockBool:
+			firstBlockBool = False
+			self.obj = self.scene.addObject('centerOfCoridor', self)
+			
+		self.sebelumnyaObject = None
+		
+	def setSebelumnya(self, sebelumnya):
+		self.scene.addObject('centerOfCoridor', self)
+		self.sebelumnya = sebelumnya
+		sebelumnya.appendNext(self)
+		self.sebelumnyaObject = self.scene.addObject('wayConnector', self)
+		self.sebelumnyaObject.actuators['track'].object = sebelumnya
+		self.sebelumnyaObject['mulai'] = True
+		
+	def appendNext(self, next):
+		self.next.append(next)
+		#added = self.scene.addObject('wayConnector', self)
+		added = self.scene.addObject('wayConnector', self)
+		added.actuators['track'].object = next
+		added['mulai'] = True
+		
+	def replaceWithRoom(self):
+		if self.obj == None:
+			self.obj = self.scene.addObject('Room', self)
+		else:
+			self.obj.endObject()
+			del self.obj
+			self.obj = self.scene.addObject('Room', self)
+		self.sebelumnyaObject.endObject()
+		del self.sebelumnyaObject
+		self.obj.actuators['track'].object = self.sebelumnya
+		self.obj['mulai'] = True
+		
+		
 	def run(self):
 		if self.sebelumnya != None:
-			bge.render.drawLine(self.position, self.sebelumnya.position, [1, 1, 1])
+			#bge.render.drawLine(self.position, self.sebelumnya.position, [1, 1, 1])
+			pass
 			
 	def __repr__(self):
 		return "Loc <{0}>".format(str(self.v))
@@ -106,7 +146,9 @@ class KX_BlockAdder(bge.types.KX_GameObject):
 		firstStart = True
 		print("building the blocks. Plrease wait...")
 		for x in range(diameter):
+			x *= scale
 			for y in range(diameter):
+				y *= scale
 				added = KX_GreenBlock(self.scene.addObject('green_cube', self))
 				added.position.x = x
 				added.position.y = y
@@ -131,23 +173,24 @@ class KX_BlockAdder(bge.types.KX_GameObject):
 				#self.listBlock[added.position] = added
 				
 		for added in self.listBlock:
-			for i in self.listBlock:
-				ada = False
-				if added + atas == i:
-					ada = True
-				if added + bawah == i:
-					ada = True
-				if added + kiri == i:
-					ada = True
-				if added + kanan == i:
-					ada = True
+			adaatas = added + atas
+			adabawah = added + bawah
+			adakiri = added + kiri
+			adakanan = added + kanan
+			
+			if adaatas in self.listBlock:
+				added.object.jalur.append(self.listBlock[self.listBlock.index(adaatas)].object)
+			if adabawah in self.listBlock:
+				added.object.jalur.append(self.listBlock[self.listBlock.index(adabawah)].object)
+			if adakiri in self.listBlock:
+				added.object.jalur.append(self.listBlock[self.listBlock.index(adakiri)].object)
+			if adakanan in self.listBlock:
+				added.object.jalur.append(self.listBlock[self.listBlock.index(adakanan)].object)
 				
-				if ada == True:
-					added.object.jalur.append(i.object)
 		v = self.curBlock.jalur[floor(random() * len(self.curBlock.jalur))].v
 		self.arah = v - self.curBlock.v
-		point = KX_RedBlock(self.scene.addObject('red_cube', self.curBlock))
-		self.lastRedblock = point
+		#point = KX_RedBlock(self.scene.addObject('red_cube', self.curBlock))
+		#self.lastRedblock = point
 		self.curBlock.visible = False
 		
 		
@@ -179,17 +222,17 @@ class KX_BlockAdder(bge.types.KX_GameObject):
 				if self.langkah > 0:
 					print("arahnya ialah " + str(self.arah))
 					teredit = False
-					if self.arah[0] > 1:
-						self.arah[0] = int(1)
+					if self.arah[0] > scale:
+						self.arah[0] = int(scale)
 						teredit = True
-					if self.arah[0] < -1:
-						self.arah[0] = int(-1)
+					if self.arah[0] < -scale:
+						self.arah[0] = int(-scale)
 						teredit = True
-					if self.arah[1] > 1:
-						self.arah[1] = int(1)
+					if self.arah[1] > scale:
+						self.arah[1] = int(scale)
 						teredit = True
-					if self.arah[1] < -1:
-						self.arah = int(-1)
+					if self.arah[1] < -scale:
+						self.arah = int(-scale)
 						teredit = True
 					if teredit:
 						print("fix arahnya ialah " + str(self.arah))
@@ -210,10 +253,11 @@ class KX_BlockAdder(bge.types.KX_GameObject):
 							print(cek)
 							v = jalur[acakResult].v
 							if jalur[acakResult].object.sebelumnya == None:
-								jalur[acakResult].object.sebelumnya = self.curBlock
+								#jalur[acakResult].object.sebelumnya = self.curBlock
+								jalur[acakResult].object.setSebelumnya(self.curBlock)
 							self.curBlock = jalur[acakResult]
 							self.usedBlock.append(jalur[acakResult])
-							point = KX_RedBlock(self.scene.addObject('red_cube', jalur[acakResult]))
+							#point = KX_RedBlock(self.scene.addObject('red_cube', jalur[acakResult]))
 							self.arah = v - self.curBlock.v
 							print("result of self.arah = " + str(self.arah))
 						else:
@@ -228,10 +272,11 @@ class KX_BlockAdder(bge.types.KX_GameObject):
 							if i == next:
 								ada = True
 								if i.object.sebelumnya == None:
-									i.object.sebelumnya = self.curBlock
+									#i.object.sebelumnya = self.curBlock
+									i.object.setSebelumnya(self.curBlock)
 								self.curBlock = i.object
 								self.usedBlock.append(i.object)
-								point = KX_RedBlock(self.scene.addObject('red_cube', i.object))
+								#point = KX_RedBlock(self.scene.addObject('red_cube', i.object))
 								#point.sebelumnya = self.lastRedblock
 								#self.lastRedblock = point
 								i.object.visible = False
@@ -265,8 +310,9 @@ class KX_BlockAdder(bge.types.KX_GameObject):
 								self.antrian.append(terpilih)
 								self.usedBlock.append(terpilih)
 								if terpilih.sebelumnya == None:
-									terpilih.sebelumnya = self.curBlock
-								point = KX_RedBlock(self.scene.addObject('red_cube', terpilih))
+									#terpilih.sebelumnya = self.curBlock
+									terpilih.setSebelumnya(self.curBlock)
+								#point = KX_RedBlock(self.scene.addObject('red_cube', terpilih))
 							except:
 								cek = terpilih, self.curBlock
 								print("error di sini ref : " + str(cek))
@@ -285,8 +331,9 @@ class KX_BlockAdder(bge.types.KX_GameObject):
 								self.antrian.append(i)
 								self.usedBlock.append(i)
 								if i.sebelumnya == None:
-									i.sebelumnya = self.curBlock
-								point = KX_RedBlock(self.scene.addObject('red_cube', i))
+									#i.sebelumnya = self.curBlock
+									i.setSebelumnya(self.curBlock)
+								#point = KX_RedBlock(self.scene.addObject('red_cube', i))
 								#let it pass so it can acak lagi self.antrian nya
 								
 					pa = len(self.antrian)
@@ -317,6 +364,7 @@ class KX_BlockAdder(bge.types.KX_GameObject):
 					self.generateStats = "wayNodes"
 					self.wayIndex = 0
 				elif self.generateStats == "wayNodes":
+					'''
 					curNode = self.listBlock[self.wayIndex].object
 					print("mendata " + str(curNode))
 					if curNode.sebelumnya != None:
@@ -327,34 +375,46 @@ class KX_BlockAdder(bge.types.KX_GameObject):
 						print("collecting the edge of nodes...")
 						self.wayIndex = 0
 						self.nodeEdge = []
+					'''
+					
+					'''  Let's just pass this
+					for curVec in self.listBlock:
+						curNode = curVec.object
+						if curNode.sebelumnya != None:
+							#curNode.sebelumnya.next.append(curNode)
+							curNode.sebelumnya.appendNext(curNode)
+					'''
+							
+					self.generateStats = "collectingTheEdge"
+					print("collecting the edge of nodes...")
+					self.wayIndex = 0
+					self.nodeEdge = []
 				elif self.generateStats == "collectingTheEdge":
-					curNode = self.listBlock[self.wayIndex].object
-					if len(curNode.next) == 0 and curNode.sebelumnya != None:
-						print("adding edge " + str(curNode))
-						self.nodeEdge.append(curNode)
+					for curVec in self.listBlock:
+						curNode = curVec.object
+						if len(curNode.next) == 0 and curNode.sebelumnya != None:
+							print("adding edge " + str(curNode))
+							self.nodeEdge.append(curNode)
 						
-					self.wayIndex += 1
-						
-					if self.wayIndex >= len(self.listBlock):
-						print("inserting start point...")
-						self.tempEdge = list(self.nodeEdge)
-						terpilih = floor(random() * len(self.tempEdge))
-						self.startPoint = self.tempEdge[terpilih]
-						del self.tempEdge[terpilih]
-						print("{0} has been choosen as the start point".format(str(self.startPoint)))
-						added = self.scene.addObject('input', self.startPoint)
-						
-						print("inserting end point...")
-						terpilih = floor(random() * len(self.tempEdge))
-						self.endPoint = self.tempEdge[terpilih]
-						del self.tempEdge[terpilih]
-						print("{0} has been choosen as the end point".format(self.endPoint))
-						added = self.scene.addObject('output', self.endPoint)
-						
-						self.generateStats = "insertingRoom"
-						print("inserting room...")
-						self.wayIndex = 0
-						self.roomCount = 0
+					print("inserting start point...")
+					self.tempEdge = list(self.nodeEdge)
+					terpilih = floor(random() * len(self.tempEdge))
+					self.startPoint = self.tempEdge[terpilih]
+					del self.tempEdge[terpilih]
+					print("{0} has been choosen as the start point".format(str(self.startPoint)))
+					added = self.scene.addObject('input', self.startPoint)
+					
+					print("inserting end point...")
+					terpilih = floor(random() * len(self.tempEdge))
+					self.endPoint = self.tempEdge[terpilih]
+					del self.tempEdge[terpilih]
+					print("{0} has been choosen as the end point".format(self.endPoint))
+					added = self.scene.addObject('output', self.endPoint)
+					
+					self.generateStats = "insertingRoom"
+					print("inserting room...")
+					self.wayIndex = 0
+					self.roomCount = 0
 				elif self.generateStats == "insertingRoom":
 					if len(self.tempEdge) > 0:
 						terpilih = floor(random() * len(self.tempEdge))
@@ -362,7 +422,9 @@ class KX_BlockAdder(bge.types.KX_GameObject):
 						if self.roomCount < maxRoom:
 							#memasukan ruangan
 							print("{0} has been choosen as the room".format(str(edge)))
-							added = self.scene.addObject('Room', edge)
+							#added = self.scene.addObject('Room', edge)
+							#added.actuators['track'].object = edge.sebelumnya
+							edge.replaceWithRoom()
 							self.roomCount += 1
 						else:
 							pass
